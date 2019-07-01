@@ -1,16 +1,11 @@
 package com.wix.detox.espresso.scroll;
 
-import android.os.SystemClock;
-import android.util.Log;
-import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewConfiguration;
 
 import com.wix.detox.espresso.UiAutomatorHelper;
 import com.wix.detox.espresso.common.annot.MotionDir;
 
 import androidx.test.espresso.UiController;
-import androidx.test.espresso.action.MotionEvents;
 
 import static com.wix.detox.espresso.common.annot.MotionDefsKt.MOTION_DIR_DOWN;
 import static com.wix.detox.espresso.common.annot.MotionDefsKt.MOTION_DIR_LEFT;
@@ -159,35 +154,17 @@ public class ScrollHelper {
         final float[][] steps = interpolate(startCoordinates, endCoordinates);
         final int delayBetweenMovements = SCROLL_DURATION_MS / steps.length;
 
-        final MotionEvent downEvent = MotionEvents.sendDown(uiController, startCoordinates, SCROLL_PRECISION).down;
+        final SwipeExecutor motionSequence = new SyncedSwipeExecutor(uiController, delayBetweenMovements);
+
+        motionSequence.startAt(downX, downY);
         try {
-            for (int i = 0; i < steps.length; i++) {
-                if (!MotionEvents.sendMovement(uiController, downEvent, steps[i])) {
-                    Log.e(LOG_TAG, "Injection of move event as part of the scroll failed. Sending cancel event.");
-                    MotionEvents.sendCancel(uiController, downEvent);
+            for (float[] step : steps) {
+                if (!motionSequence.moveTo(step[0], step[1])) {
                     return;
                 }
-
-                long desiredTime = downEvent.getDownTime() + delayBetweenMovements * i;
-                long timeUntilDesired = desiredTime - SystemClock.uptimeMillis();
-                if (timeUntilDesired > 10) {
-                    uiController.loopMainThreadForAtLeast(timeUntilDesired);
-                }
-            }
-
-            if (!MotionEvents.sendUp(uiController, downEvent, endCoordinates)) {
-                Log.e(LOG_TAG, "Injection of up event as part of the scroll failed. Sending cancel event.");
-                MotionEvents.sendCancel(uiController, downEvent);
             }
         } finally {
-            downEvent.recycle();
-        }
-
-        // Ensures that all child views leave the pressed-on state, if in effect.
-        // This is paramount for having consequent tap-events registered properly.
-        final int androidPressedDuration = ViewConfiguration.getPressedStateDuration();
-        if (androidPressedDuration > 0) {
-            uiController.loopMainThreadForAtLeast(androidPressedDuration);
+            motionSequence.finishAt(upX, upY);
         }
     }
 
